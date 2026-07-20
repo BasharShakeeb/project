@@ -4,6 +4,12 @@ import { useI18n } from "@/lib/i18n-context";
 import { Topbar } from "@/components/topbar";
 import { DashboardPage } from "@/pages/dashboard";
 import { TasksPage } from "@/pages/tasks";
+import { GoalsPage } from "@/pages/goals";
+import { HabitsPage } from "@/pages/habits";
+import { CalendarPage } from "@/pages/calendar";
+import { HealthPage } from "@/pages/health";
+import { FinancePage } from "@/pages/finance";
+import { SettingsPage } from "@/pages/settings";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -56,10 +62,12 @@ export default function App() {
           <Routes>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/tasks" element={<TasksPage />} />
-            <Route path="/calendar" element={<PlaceholderPage title={t.nav.calendar} />} />
-            <Route path="/goals" element={<PlaceholderPage title={t.nav.goals} />} />
-            <Route path="/habits" element={<PlaceholderPage title={t.nav.habits} />} />
-            <Route path="/settings" element={<PlaceholderPage title={t.nav.settings} />} />
+            <Route path="/calendar" element={<CalendarPage />} />
+            <Route path="/goals" element={<GoalsPage />} />
+            <Route path="/habits" element={<HabitsPage />} />
+            <Route path="/health" element={<HealthPage />} />
+            <Route path="/finance" element={<FinancePage />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </main>
       </div>
@@ -67,11 +75,4 @@ export default function App() {
   );
 }
 
-function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <h2 className="text-2xl font-bold">{title}</h2>
-      <p className="mt-2 text-muted-foreground">Coming soon</p>
-    </div>
-  );
-}
+
