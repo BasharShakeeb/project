@@ -33,6 +33,7 @@ export function TasksPage() {
 
   async function fetchTasks() {
     setLoading(true);
+    if (!supabase) { setLoading(false); return; }
     const { data } = await supabase.from("tasks").select("*").order("created_at", { ascending: false });
     setTasks((data as Task[]) || []);
     setLoading(false);
@@ -60,10 +61,12 @@ export function TasksPage() {
       due_date: dueDate ? new Date(dueDate).toISOString() : null,
     };
     if (editing) {
+      if (!supabase) return;
       const { error } = await supabase.from("tasks").update(payload).eq("id", editing.id);
       if (error) { toast.error(error.message); return; }
       toast.success("Task updated");
     } else {
+      if (!supabase) return;
       const { error } = await supabase.from("tasks").insert(payload);
       if (error) { toast.error(error.message); return; }
       toast.success("Task created");
@@ -72,6 +75,7 @@ export function TasksPage() {
   }
 
   async function toggleStatus(task: Task) {
+    if (!supabase) return;
     const newStatus = task.status === "done" ? "todo" : "done";
     const { error } = await supabase.from("tasks").update({ status: newStatus }).eq("id", task.id);
     if (error) { toast.error(error.message); return; }
@@ -79,6 +83,7 @@ export function TasksPage() {
   }
 
   async function deleteTask(id: string) {
+    if (!supabase) return;
     const { error } = await supabase.from("tasks").delete().eq("id", id);
     if (error) { toast.error(error.message); return; }
     toast.success("Task deleted"); fetchTasks();

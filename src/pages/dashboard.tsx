@@ -20,6 +20,7 @@ export function DashboardPage() {
 
   async function fetchData() {
     setLoading(true);
+    if (!supabase) { setLoading(false); return; }
     const [tasksRes, goalsRes] = await Promise.all([
       supabase.from("tasks").select("*").order("created_at", { ascending: false }),
       supabase.from("goals").select("*").eq("status", "active").order("created_at"),
@@ -43,7 +44,7 @@ export function DashboardPage() {
     setPlanning(true);
     setDayPlan(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-plan-day`, {
         method: "POST",
         headers: {
