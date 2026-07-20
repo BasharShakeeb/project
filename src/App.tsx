@@ -10,7 +10,12 @@ import { CalendarPage } from "@/pages/calendar";
 import { HealthPage } from "@/pages/health";
 import { FinancePage } from "@/pages/finance";
 import { SettingsPage } from "@/pages/settings";
+import { AuthPage } from "@/pages/auth";
 import { cn } from "@/lib/utils";
+import { Toaster } from "sonner";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { Session } from "@supabase/supabase-js";
 
 const navItems = [
   { key: "dashboard", href: "/", icon: LayoutDashboard },
@@ -24,9 +29,45 @@ const navItems = [
 export default function App() {
   const { t } = useI18n();
   const location = useLocation();
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+    
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (loading) {
+    return <div className="flex min-h-screen items-center justify-center">Loading...</div>;
+  }
+
+  if (!session) {
+    return (
+      <>
+        <Toaster position="top-center" richColors />
+        <AuthPage />
+      </>
+    );
+  }
 
   return (
     <div className="flex min-h-screen">
+      <Toaster position="top-center" richColors />
       <aside className="hidden w-64 shrink-0 border-e border-border bg-card md:flex md:flex-col">
         <div className="flex h-16 items-center gap-2 border-b border-border px-6">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
