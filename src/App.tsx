@@ -1,7 +1,9 @@
+import { useEffect, useState } from "react";
 import { Routes, Route, Link, useLocation } from "react-router-dom";
 import { LayoutDashboard, CheckSquare, Calendar, Target, Repeat, Settings } from "lucide-react";
-import { SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
 import { useI18n } from "@/lib/i18n-context";
+import { supabase } from "@/lib/supabase";
+import { Session } from "@supabase/supabase-js";
 import { Topbar } from "@/components/topbar";
 import { DashboardPage } from "@/pages/dashboard";
 import { TasksPage } from "@/pages/tasks";
@@ -12,7 +14,6 @@ import { HealthPage } from "@/pages/health";
 import { FinancePage } from "@/pages/finance";
 import { SettingsPage } from "@/pages/settings";
 import { AuthPage } from "@/pages/auth";
-import { SSOCallback } from "@/pages/sso-callback";
 import { cn } from "@/lib/utils";
 import { Toaster } from "sonner";
 
@@ -77,28 +78,47 @@ function AppLayout() {
 }
 
 export default function App() {
-  return (
-    <>
-      <Toaster position="top-center" richColors />
-      {/* SSO Callback — public, no auth required */}
-      <Routes>
-        <Route path="/sso-callback" element={<SSOCallback />} />
-        <Route
-          path="*"
-          element={
-            <>
-              <SignedIn>
-                <AppLayout />
-              </SignedIn>
-              <SignedOut>
-                <AuthPage />
-              </SignedOut>
-            </>
-          }
-        />
-      </Routes>
-    </>
-  );
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+    
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <>
+        <Toaster position="top-center" richColors />
+        <AuthPage />
+      </>
+    );
+  }
+
+  return <AppLayout />;
 }
 
 

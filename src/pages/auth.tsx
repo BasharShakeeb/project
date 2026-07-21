@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useSignIn, useSignUp } from "@clerk/clerk-react";
+import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n-context";
 
@@ -10,29 +10,39 @@ export function AuthPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const { signIn, isLoaded: signInLoaded } = useSignIn();
-  const { signUp, isLoaded: signUpLoaded } = useSignUp();
-
   // ── Email + Password ─────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!signInLoaded || !signUpLoaded) return;
+    if (!supabase) {
+      toast.error("Supabase client is not initialized.");
+      return;
+    }
     setLoading(true);
 
     try {
       if (isLogin) {
-        const result = await signIn.create({ identifier: email, password });
-        if (result.status === "complete") {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) {
+          toast.error(error.message);
+        } else {
           toast.success("تم تسجيل الدخول بنجاح!");
-          window.location.href = "/";
         }
       } else {
-        await signUp.create({ emailAddress: email, password });
-        await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
-        toast.success("تم إنشاء الحساب! تحقق من بريدك الإلكتروني.");
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+        if (error) {
+          toast.error(error.message);
+        } else {
+          toast.success("تم إنشاء الحساب! تحقق من بريدك الإلكتروني.");
+        }
       }
     } catch (err: any) {
-      toast.error(err?.errors?.[0]?.message ?? "حدث خطأ، حاول مجدداً.");
+      toast.error(err?.message ?? "حدث خطأ، حاول مجدداً.");
     } finally {
       setLoading(false);
     }
@@ -40,12 +50,23 @@ export function AuthPage() {
 
   // ── Google OAuth ─────────────────────────────────────────────────
   async function handleGoogleSignIn() {
-    if (!signInLoaded) return;
-    await signIn.authenticateWithRedirect({
-      strategy: "oauth_google",
-      redirectUrl: "/sso-callback",
-      redirectUrlComplete: "/",
-    });
+    if (!supabase) {
+      toast.error("Supabase client is not initialized.");
+      return;
+    }
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin,
+        },
+      });
+      if (error) {
+        toast.error(error.message);
+      }
+    } catch (err: any) {
+      toast.error(err?.message ?? "حدث خطأ أثناء تسجيل الدخول عبر Google.");
+    }
   }
 
   return (

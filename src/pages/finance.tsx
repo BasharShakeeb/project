@@ -45,15 +45,22 @@ export function FinancePage() {
   async function handleSave() {
     if (!amount || Number(amount) <= 0) { toast.error("Enter a valid amount"); return; }
     if (!category.trim()) { toast.error("Category is required"); return; }
+    if (!supabase) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("User session not found. Please log in.");
+      return;
+    }
 
     const payload = {
       type,
       amount: Number(amount),
       category: category.trim(),
       date,
+      user_id: user.id,
     };
     
-    if (!supabase) return;
     const { error } = await supabase.from("transactions").insert(payload);
     if (error) { toast.error(error.message); return; }
     

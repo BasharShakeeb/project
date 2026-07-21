@@ -56,15 +56,22 @@ export function CalendarPage() {
     if (new Date(end) < new Date(startAt)) {
       toast.error("End time must be after start time"); return;
     }
+    if (!supabase) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("User session not found. Please log in.");
+      return;
+    }
 
     const payload = {
       title: title.trim(),
       all_day: allDay,
       start_at: new Date(startAt).toISOString(),
       end_at: new Date(end).toISOString(),
+      user_id: user.id,
     };
     
-    if (!supabase) return;
     const { error } = await supabase.from("events").insert(payload);
     if (error) { toast.error(error.message); return; }
     

@@ -59,6 +59,13 @@ export function HealthPage() {
     setSaving(true);
     if (!supabase) { setSaving(false); return; }
 
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("User session not found. Please log in.");
+      setSaving(false);
+      return;
+    }
+
     const payload = {
       log_date: logDate,
       water_cups: logData.water_cups,
@@ -66,6 +73,7 @@ export function HealthPage() {
       weight_kg: logData.weight_kg === "" ? null : Number(logData.weight_kg),
       exercise_minutes: logData.exercise_minutes,
       mood: logData.mood === "" ? null : Number(logData.mood),
+      user_id: user.id,
     };
 
     if (logData.id) {

@@ -56,19 +56,26 @@ export function GoalsPage() {
 
   async function handleSave() {
     if (!title.trim()) { toast.error("Title is required"); return; }
+    if (!supabase) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("User session not found. Please log in.");
+      return;
+    }
+
     const payload = {
       title: title.trim(),
       type, target_value: targetValue, current_value: currentValue, status,
       deadline: deadline ? new Date(deadline).toISOString() : null,
+      user_id: user.id,
     };
     
     if (editing) {
-      if (!supabase) return;
       const { error } = await supabase.from("goals").update(payload).eq("id", editing.id);
       if (error) { toast.error(error.message); return; }
       toast.success(t.goals.save);
     } else {
-      if (!supabase) return;
       const { error } = await supabase.from("goals").insert(payload);
       if (error) { toast.error(error.message); return; }
       toast.success(t.goals.create);

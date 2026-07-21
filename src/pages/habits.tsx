@@ -73,15 +73,26 @@ export function HabitsPage() {
 
   async function handleSave() {
     if (!name.trim()) { toast.error("Name is required"); return; }
-    const payload = { name: name.trim(), frequency, target_per_week: targetPerWeek };
+    if (!supabase) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("User session not found. Please log in.");
+      return;
+    }
+
+    const payload = {
+      name: name.trim(),
+      frequency,
+      target_per_week: targetPerWeek,
+      user_id: user.id,
+    };
     
     if (editing) {
-      if (!supabase) return;
       const { error } = await supabase.from("habits").update(payload).eq("id", editing.id);
       if (error) { toast.error(error.message); return; }
       toast.success(t.habits.save);
     } else {
-      if (!supabase) return;
       const { error } = await supabase.from("habits").insert(payload);
       if (error) { toast.error(error.message); return; }
       toast.success(t.habits.create);
@@ -98,6 +109,12 @@ export function HabitsPage() {
 
   async function toggleLog(habitId: string, date: Date) {
     if (!supabase) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("User session not found. Please log in.");
+      return;
+    }
+
     const dateStr = date.toISOString().split("T")[0];
     const existing = logs.find(l => l.habit_id === habitId && l.log_date === dateStr);
     
@@ -107,7 +124,7 @@ export function HabitsPage() {
       if (error) { toast.error(error.message); return; }
     } else {
       const { error } = await supabase.from("habit_logs").insert({
-        habit_id: habitId, log_date: dateStr, completed: true
+        habit_id: habitId, log_date: dateStr, completed: true, user_id: user.id
       });
       if (error) { toast.error(error.message); return; }
     }

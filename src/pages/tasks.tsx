@@ -54,19 +54,26 @@ export function TasksPage() {
 
   async function handleSave() {
     if (!title.trim()) { toast.error("Title is required"); return; }
+    if (!supabase) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("User session not found. Please log in.");
+      return;
+    }
+
     const payload = {
       title: title.trim(),
       description: description.trim() || null,
       status, priority,
       due_date: dueDate ? new Date(dueDate).toISOString() : null,
+      user_id: user.id,
     };
     if (editing) {
-      if (!supabase) return;
       const { error } = await supabase.from("tasks").update(payload).eq("id", editing.id);
       if (error) { toast.error(error.message); return; }
       toast.success("Task updated");
     } else {
-      if (!supabase) return;
       const { error } = await supabase.from("tasks").insert(payload);
       if (error) { toast.error(error.message); return; }
       toast.success("Task created");
