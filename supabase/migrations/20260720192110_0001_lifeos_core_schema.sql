@@ -478,3 +478,189 @@ DROP TRIGGER IF EXISTS trg_assignments_updated_at ON assignments;
 CREATE TRIGGER trg_assignments_updated_at BEFORE UPDATE ON assignments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 DROP TRIGGER IF EXISTS trg_exams_updated_at ON exams;
 CREATE TRIGGER trg_exams_updated_at BEFORE UPDATE ON exams FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+
+
+-- =====================================================================
+-- LifeOS — Database Fix Migration
+-- Generated from schema review. Safe to run on top of the existing
+-- schema (idempotent: uses IF NOT EXISTS / DROP ... IF EXISTS everywhere).
+-- Does NOT touch frontend, backend, API routes, or business logic.
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- 0. Ensure pgcrypto is available for gen_random_uuid()
+-- ---------------------------------------------------------------------
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- ---------------------------------------------------------------------
+-- 1. FIX: profiles is missing a DELETE policy
+-- ---------------------------------------------------------------------
+DROP POLICY IF EXISTS "delete_own_profile" ON profiles;
+CREATE POLICY "delete_own_profile" ON profiles
+  FOR DELETE TO authenticated USING (auth.uid() = id);
+
+-- ---------------------------------------------------------------------
+-- 2. FIX: missing indexes on foreign key columns
+-- ---------------------------------------------------------------------
+CREATE INDEX IF NOT EXISTS idx_tasks_category_id      ON tasks(category_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_id    ON tasks(parent_task_id);
+CREATE INDEX IF NOT EXISTS idx_habit_logs_habit_id     ON habit_logs(habit_id);
+CREATE INDEX IF NOT EXISTS idx_time_sessions_task_id   ON time_sessions(task_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_budget_id  ON transactions(budget_id);
+CREATE INDEX IF NOT EXISTS idx_assignments_subject_id  ON assignments(subject_id);
+CREATE INDEX IF NOT EXISTS idx_exams_subject_id        ON exams(subject_id);
+
+-- ---------------------------------------------------------------------
+-- 3. FIX: health_logs and transactions allow UPDATE but have no
+--    updated_at tracking (inconsistent with the rest of the schema)
+-- ---------------------------------------------------------------------
+ALTER TABLE health_logs ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+DROP TRIGGER IF EXISTS trg_health_logs_updated_at ON health_logs;
+CREATE TRIGGER trg_health_logs_updated_at
+  BEFORE UPDATE ON health_logs
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+DROP TRIGGER IF EXISTS trg_transactions_updated_at ON transactions;
+CREATE TRIGGER trg_transactions_updated_at
+  BEFORE UPDATE ON transactions
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+DROP TRIGGER IF EXISTS trg_habit_logs_updated_at ON habit_logs;
+CREATE TRIGGER trg_habit_logs_updated_at
+  BEFORE UPDATE ON habit_logs
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ---------------------------------------------------------------------
+-- 4. FIX: cross-tenant ownership gap on FKs that point into another
+--    user-owned table (RLS protects rows directly, but a plain FK does
+--    NOT verify the referenced row belongs to the SAME user_id).
+--    Each check below is a BEFORE INSERT OR UPDATE trigger.
+-- ---------------------------------------------------------------------
+
+-- tasks.category_id must belong to the same user
+CREATE OR REPLACE FUNCTION check_task_category_owner()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.category_id IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM categories WHERE id = NEW.category_id AND user_id = NEW.user_id
+    ) THEN
+      RAISE EXCEPTION 'category_id does not belong to the current user';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS trg_tasks_check_category ON tasks;
+CREATE TRIGGER trg_tasks_check_category
+  BEFORE INSERT OR UPDATE ON tasks
+  FOR EACH ROW EXECUTE FUNCTION check_task_category_owner();
+
+-- tasks.parent_task_id must belong to the same user
+CREATE OR REPLACE FUNCTION check_task_parent_owner()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.parent_task_id IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM tasks WHERE id = NEW.parent_task_id AND user_id = NEW.user_id
+    ) THEN
+      RAISE EXCEPTION 'parent_task_id does not belong to the current user';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS trg_tasks_check_parent ON tasks;
+CREATE TRIGGER trg_tasks_check_parent
+  BEFORE INSERT OR UPDATE ON tasks
+  FOR EACH ROW EXECUTE FUNCTION check_task_parent_owner();
+
+-- habit_logs.habit_id must belong to the same user
+CREATE OR REPLACE FUNCTION check_habit_log_owner()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM habits WHERE id = NEW.habit_id AND user_id = NEW.user_id
+  ) THEN
+    RAISE EXCEPTION 'habit_id does not belong to the current user';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS trg_habit_logs_check_owner ON habit_logs;
+CREATE TRIGGER trg_habit_logs_check_owner
+  BEFORE INSERT OR UPDATE ON habit_logs
+  FOR EACH ROW EXECUTE FUNCTION check_habit_log_owner();
+
+-- time_sessions.task_id must belong to the same user
+CREATE OR REPLACE FUNCTION check_time_session_task_owner()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.task_id IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM tasks WHERE id = NEW.task_id AND user_id = NEW.user_id
+    ) THEN
+      RAISE EXCEPTION 'task_id does not belong to the current user';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS trg_time_sessions_check_task ON time_sessions;
+CREATE TRIGGER trg_time_sessions_check_task
+  BEFORE INSERT OR UPDATE ON time_sessions
+  FOR EACH ROW EXECUTE FUNCTION check_time_session_task_owner();
+
+-- transactions.budget_id must belong to the same user
+CREATE OR REPLACE FUNCTION check_transaction_budget_owner()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.budget_id IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM budgets WHERE id = NEW.budget_id AND user_id = NEW.user_id
+    ) THEN
+      RAISE EXCEPTION 'budget_id does not belong to the current user';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS trg_transactions_check_budget ON transactions;
+CREATE TRIGGER trg_transactions_check_budget
+  BEFORE INSERT OR UPDATE ON transactions
+  FOR EACH ROW EXECUTE FUNCTION check_transaction_budget_owner();
+
+-- assignments.subject_id / exams.subject_id must belong to the same user
+CREATE OR REPLACE FUNCTION check_subject_owner()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM subjects WHERE id = NEW.subject_id AND user_id = NEW.user_id
+  ) THEN
+    RAISE EXCEPTION 'subject_id does not belong to the current user';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS trg_assignments_check_subject ON assignments;
+CREATE TRIGGER trg_assignments_check_subject
+  BEFORE INSERT OR UPDATE ON assignments
+  FOR EACH ROW EXECUTE FUNCTION check_subject_owner();
+
+DROP TRIGGER IF EXISTS trg_exams_check_subject ON exams;
+CREATE TRIGGER trg_exams_check_subject
+  BEFORE INSERT OR UPDATE ON exams
+  FOR EACH ROW EXECUTE FUNCTION check_subject_owner();
+
+-- =====================================================================
+-- End of migration
+-- =====================================================================
